@@ -2,6 +2,7 @@ import requests
 import os
 import json
 import sys
+import difflib
 
 
 def print_flush(*args, **kwargs):
@@ -80,6 +81,26 @@ def update_gist(gist_id: str, gist_content: dict, access_token: str):
         return False
 
 
+def get_gist_file_content(gist_id: str, filename: str):
+    url = f"https://api.github.com/gists/{gist_id}"
+    response = requests.get(url)
+
+    if response.status_code == 200:
+        gist_data = response.json()
+        files = gist_data.get("files")
+        if not files:
+            print_flush('Error: get_gist_file_content(): No "files"')
+            return None
+        if filename not in files:
+            print_flush("Error: get_gist_file_content(): file not found")
+            return None
+        content = files[filename]["content"]
+        return content
+    else:
+        print_flush("Error: Failed to get Gist:", response.status_code)
+        return None
+
+
 if __name__ == "__main__":
     # load secrets
     personal_token = os.environ["MY_TOKEN"]
@@ -108,13 +129,41 @@ if __name__ == "__main__":
             print_flush(f"Info: {repo['owner']}/{repo['name']}: {star_num} star(s)")
 
             filename = f"{repo['owner']}#{repo['name']}"
-            content = ""
+            new_content = []
             for stargazer in star_info:
                 line = str(stargazer["id"]) + ","
                 line += stargazer["username"] + ","
                 line += stargazer["starred_at"] + "\n"
-                content += line
-            gist_content[filename] = {"content": content}
+                new_content.append(line)
+
+            old_content = get_gist_file_content(gist_id, filename)
+            need_update = False
+            if old_content is None:
+                print_flush("Warning: No history data")
+                need_update = True
+            else:
+                old_content = old_content.splitlines(keepends=True)
+                diff_result = difflib.ndiff(old_content, new_content)
+                lost = 0
+                new = 0
+                for item in diff_result:
+                    if item.startswith("- "):
+                        lost += 1
+                    elif item.startswith("+ "):
+                        new += 1
+                if lost != 0:
+                    print_flush(f"Info: Lost {lost} star(s)")
+                    need_update = True
+                if new != 0:
+                    print_flush(f"Info: Get {new} star(s)")
+                    need_update = True
+
+            if need_update:
+                content = ""
+                for line in new_content:
+                    content += line
+                gist_content[filename] = {"content": content}
+                print_flush(f"Info: {repo['owner']}/{repo['name']}: Need update")
 
     # update gists
     if len(gist_content) == 0:
