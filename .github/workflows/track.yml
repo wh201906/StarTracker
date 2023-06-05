@@ -1,0 +1,22 @@
+name: Track Stars
+
+on:
+  push:
+  workflow_dispatch:
+  schedule:
+    - cron: "6 1,4,7,10,13,16,19,22 * * *"
+
+
+jobs:
+  checker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Run script
+        env:
+          MY_TOKEN: ${{ secrets.MY_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GIST_ID: ${{ secrets.GIST_ID }}
+        run: python tracker.py
