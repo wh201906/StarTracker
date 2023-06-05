@@ -101,7 +101,24 @@ def get_gist_file_content(gist_id: str, filename: str):
         return None
 
 
+def get_rate_limit(access_token=None):
+    url = "https://api.github.com/rate_limit"
+    headers = {"Accept": "application/vnd.github.v3+json"}
+    if access_token:
+        headers["Authorization"] = f"Bearer {access_token}"
+
+    response = requests.get(url, headers=headers)
+
+    if response.status_code == 200:
+        rate_limit_data = response.json()
+        return rate_limit_data["resources"]["core"]["remaining"]
+    else:
+        print_flush("Error: Failed to get limit:", response.status_code)
+        return 0
+
+
 if __name__ == "__main__":
+    exit_code = 0
     # load secrets
     personal_token = os.environ["MY_TOKEN"]
     action_token = os.environ["GITHUB_TOKEN"]
@@ -170,4 +187,9 @@ if __name__ == "__main__":
         print_flush("Warning: Nothing to write")
     else:
         if not update_gist(gist_id, gist_content, personal_token):
-            sys.exit(1)
+            exit_code = 1
+
+    print_flush("Info: Rate limit without authorization:", get_rate_limit())
+    print_flush("Info: Rate limit for action token:", get_rate_limit(action_token))
+    print_flush("Info: Rate limit for personal token:", get_rate_limit(personal_token))
+    sys.exit(exit_code)
