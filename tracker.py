@@ -211,6 +211,7 @@ def get_rate_limit(access_token=None):
 
 if __name__ == "__main__":
     exit_code = 0
+    star_changed = False
     # load secrets
     personal_token = os.environ["MY_TOKEN"]
     action_token = os.environ["GITHUB_TOKEN"]
@@ -278,6 +279,7 @@ if __name__ == "__main__":
                     need_update = True
 
             if need_update:
+                star_changed = True
                 content = ""
                 for line in new_content:
                     content += line
@@ -294,4 +296,9 @@ if __name__ == "__main__":
     print_flush("Info: Rate limit without authorization:", get_rate_limit())
     print_flush("Info: Rate limit for action token:", get_rate_limit(action_token))
     print_flush("Info: Rate limit for personal token:", get_rate_limit(personal_token))
+
+    # Show annotation in GitHub Actions
+    if star_changed:
+        os.system('echo "::notice::Star changed"')
+    
     sys.exit(exit_code)
