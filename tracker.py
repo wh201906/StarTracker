@@ -3,6 +3,10 @@ import os
 import json
 import sys
 import difflib
+import aiohttp
+import asyncio
+from typing import Any
+import math
 
 
 def print_flush(*args, **kwargs):
@@ -10,59 +14,140 @@ def print_flush(*args, **kwargs):
     print(*args, **kwargs)
 
 
-def get_stargazers(
-    repo_owner: str, repo_name: str, action_token: str, personal_token: str
-):
-    is_complete = True
-    max_page_items = 100
-    url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/stargazers"
+def get_repo_star_count(owner, repo, access_token):
+    url = f"https://api.github.com/repos/{owner}/{repo}"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Accept": "application/vnd.github.v3+json",
+    }
+
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        data = response.json()
+        star_count = data.get("stargazers_count")
+        return star_count
+    else:
+        return -1
+
+
+async def get_stargazers_task(session: Any, page: int, context: dict):
+    # status:
+    # 0:ok
+    # 1:using action token, ok
+    # 2:using personal token, ok
+    # 3:error
+    status = 0
     # vnd.github.v3.star+json -> with timestamp
     # vnd.github+json -> no timestamp
     headers = {"Accept": "application/vnd.github.v3.star+json"}
+    if context["token_status"] == 0:
+        pass
+    elif context["token_status"] == 1:
+        headers["Authorization"] = f"Bearer {context['action_token']}"
+        status = 1
+    elif context["token_status"] == 2:
+        headers["Authorization"] = f"Bearer {context['personal_token']}"
+        status = 2
 
-    usernames = []
-    page = 1
-
-    session = requests.session()
+    params = {"page": page, "per_page": context["max_page_items"]}
+    url = f"https://api.github.com/repos/{context['repo_owner']}/{context['repo_name']}/stargazers"
+    star_info = []
     while True:
-        params = {"page": page, "per_page": max_page_items}
-        response = session.get(url, headers=headers, params=params)
-
-        if response.status_code == 200:
-            stargazers = response.json()
-            for user in stargazers:
-                userid = user["user"]["id"]
-                username = user["user"]["login"]
-                starred_at = user["starred_at"]
-                usernames.append(
-                    {"id": userid, "username": username, "starred_at": starred_at}
-                )
-            if len(stargazers) < max_page_items:
+        async with session.get(url, headers=headers, params=params) as response:
+            if response.status == 200:
+                stargazers = await response.json()
+                for user in stargazers:
+                    userid = user["user"]["id"]
+                    username = user["user"]["login"]
+                    starred_at = user["starred_at"]
+                    star_info.append(
+                        {"id": userid, "username": username, "starred_at": starred_at}
+                    )
                 break
-            if (
-                (page <= 2000 and page % 100 == 0)
-                or (page <= 10000 and page % 500 == 0)
-                or (page % 2500 == 0)
-            ):
-                print_flush(f"Info: {repo_owner}/{repo_name}: Page: {page}")
-            page += 1
-        else:
-            print_flush("Warning: Unexpected response:", response.status_code)
-            if response.status_code < 500:
-                if not "Authorization" in headers.keys():
-                    headers["Authorization"] = f"Bearer {action_token}"
-                    print_flush(f"Warning: Using action token on page {page}")
-                    continue
-                elif headers["Authorization"].endswith(action_token):
-                    headers["Authorization"] = f"Bearer {personal_token}"
-                    print_flush(f"Warning: Using personal token on page {page}")
-                    continue
+            else:
+                if response.status == 403:
+                    if status == 0:
+                        headers["Authorization"] = f"Bearer {context['action_token']}"
+                        status = 1
+                        continue
+                    elif status == 1:
+                        headers["Authorization"] = f"Bearer {context['personal_token']}"
+                        status = 2
+                        continue
+                    else:
+                        print_flush("Error: All tokens have been used")
                 else:
-                    print_flush("Error: All tokens have been used")
-            is_complete = False
-            break
+                    print_flush("Warning: Unexpected response:", response.status)
+                status = 3
+                break
+    return star_info, status
 
-    return usernames, is_complete
+
+async def get_stargazers_collector(context: dict):
+    parallel_num = 10
+    page = 1
+    max_page = get_repo_star_count(
+        context["repo_owner"], context["repo_name"], context["personal_token"]
+    )
+    if max_page >= 0:
+        max_page = math.ceil(max_page / context["max_page_items"])
+    else:
+        return
+
+    star_info = []
+    async with aiohttp.ClientSession() as session:
+        while True:
+            tasks = []
+            # process with async tasks
+            for _ in range(min(parallel_num, max_page - page + 1)):
+                task = asyncio.create_task(get_stargazers_task(session, page, context))
+                page += 1
+                tasks.append(task)
+            results = await asyncio.gather(*tasks)
+            # handle results
+            for info, status in results:
+                star_info.extend(info)
+                if status > context["token_status"]:
+                    context["token_status"] = status
+                    if status == 3:
+                        print_flush("Error: one of the task fails")
+                    elif status == 2:
+                        print_flush(
+                            f"Warning: {context['repo_owner']}/{context['repo_name']}: Using personal token around page {page}"
+                        )
+                    elif status == 1:
+                        print_flush(
+                            f"Warning: {context['repo_owner']}/{context['repo_name']}: Using action token around page {page}"
+                        )
+                if len(info) == 0:
+                    context["token_status"] = 3
+                if context["token_status"] == 3:
+                    break
+
+            # break if error occurs or finished
+            if context["token_status"] == 3 or page > max_page:
+                break
+    return star_info, context["token_status"]
+
+
+def get_stargazers(
+    repo_owner: str,
+    repo_name: str,
+    action_token: str,
+    personal_token: str,
+    last_status: int = 0,
+):
+    max_page_items = 100
+    context = {
+        "repo_owner": repo_owner,
+        "repo_name": repo_name,
+        "max_page_items": max_page_items,
+        "action_token": action_token,
+        "personal_token": personal_token,
+        "token_status": last_status,  # aka "status"
+    }
+
+    return asyncio.run(get_stargazers_collector(context))
 
 
 # gist_content = {
@@ -136,14 +221,15 @@ if __name__ == "__main__":
         repos = json.load(f)
 
     # process every repo
+    last_status = 0
     gist_content = {}
     if len(repos) == 0:
         print_flush("Warning: No repos")
     for repo in repos:
-        star_info, is_complete = get_stargazers(
-            repo["owner"], repo["name"], action_token, personal_token
+        star_info, last_status = get_stargazers(
+            repo["owner"], repo["name"], action_token, personal_token, last_status
         )
-        if not is_complete:
+        if last_status == 3:  # error occurs
             print_flush(
                 f"Error: {repo['owner']}/{repo['name']}: Failed to get the stars"
             )

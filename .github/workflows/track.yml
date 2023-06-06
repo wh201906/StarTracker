@@ -13,6 +13,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+
+      - name: Install aiohttp
+        run: yes | pip install aiohttp
         
       - name: Run script
         env:
