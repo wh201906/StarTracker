@@ -23,9 +23,10 @@ def get_stargazers(
     usernames = []
     page = 1
 
+    session = requests.session()
     while True:
         params = {"page": page, "per_page": max_page_items}
-        response = requests.get(url, headers=headers, params=params)
+        response = session.get(url, headers=headers, params=params)
 
         if response.status_code == 200:
             stargazers = response.json()
@@ -38,17 +39,23 @@ def get_stargazers(
                 )
             if len(stargazers) < max_page_items:
                 break
+            if (
+                (page <= 2000 and page % 100 == 0)
+                or (page <= 10000 and page % 500 == 0)
+                or (page % 2500 == 0)
+            ):
+                print_flush(f"Info: {repo_owner}/{repo_name}: Page: {page}")
             page += 1
         else:
             print_flush("Warning: Unexpected response:", response.status_code)
             if response.status_code < 500:
                 if not "Authorization" in headers.keys():
                     headers["Authorization"] = f"Bearer {action_token}"
-                    print_flush("Warning: Using action token")
+                    print_flush(f"Warning: Using action token on page {page}")
                     continue
                 elif headers["Authorization"].endswith(action_token):
                     headers["Authorization"] = f"Bearer {personal_token}"
-                    print_flush("Warning: Using personal token")
+                    print_flush(f"Warning: Using personal token on page {page}")
                     continue
                 else:
                     print_flush("Error: All tokens have been used")
