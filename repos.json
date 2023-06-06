@@ -1,8 +1,5 @@
 [
-    {
-        "owner": "wh201906",
-        "name": "SerialTest"
-    },
+    "wh201906/SerialTest",
     {
         "owner": "wh201906",
         "name": "Proxmark3GUI"

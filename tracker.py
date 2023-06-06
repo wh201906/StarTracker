@@ -226,19 +226,28 @@ if __name__ == "__main__":
     if len(repos) == 0:
         print_flush("Warning: No repos")
     for repo in repos:
+        owner = ""
+        name = ""
+        if type(repo) == str:
+            owner, name = repo.split("/")
+        elif type(repo) == dict and ("owner" and "name" in repo.keys()):
+            owner = repo["owner"]
+            name = repo["name"]
+        if len(owner) == 0 or len(name) == 0:
+            print_flush("Error: Cannot treat item as repo:", repo)
+            continue
+
         star_info, last_status = get_stargazers(
-            repo["owner"], repo["name"], action_token, personal_token, last_status
+            owner, name, action_token, personal_token, last_status
         )
         if last_status == 3:  # error occurs
-            print_flush(
-                f"Error: {repo['owner']}/{repo['name']}: Failed to get the stars"
-            )
+            print_flush(f"Error: {owner}/{name}: Failed to get the stars")
             continue
         else:
             star_num = len(star_info)
-            print_flush(f"Info: {repo['owner']}/{repo['name']}: {star_num} star(s)")
+            print_flush(f"Info: {owner}/{name}: {star_num} star(s)")
 
-            filename = f"{repo['owner']}#{repo['name']}"
+            filename = f"{owner}#{name}"
             new_content = []
             for stargazer in star_info:
                 line = str(stargazer["id"]) + ","
@@ -273,7 +282,7 @@ if __name__ == "__main__":
                 for line in new_content:
                     content += line
                 gist_content[filename] = {"content": content}
-                print_flush(f"Info: {repo['owner']}/{repo['name']}: Need update")
+                print_flush(f"Info: {owner}/{name}: Need update")
 
     # update gists
     if len(gist_content) == 0:
