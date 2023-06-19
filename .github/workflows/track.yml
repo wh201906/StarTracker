@@ -3,8 +3,8 @@ name: Track Stars
 on:
   push:
   workflow_dispatch:
-  schedule:
-    - cron: "6 1-23/2 * * *"
+  # schedule:
+  #   - cron: "6 1-23/2 * * *"
 
 
 jobs:
