@@ -256,6 +256,13 @@ if __name__ == "__main__":
                 line += stargazer["starred_at"] + "\n"
                 new_content.append(line)
 
+            # It seems like the GitHub API doesn't support creating empty files when updating Gists.
+            # A new file with a empty new line is also forbidden.
+            # If I try to do so, the server returns 422
+            # {"message":"Validation Failed","errors":[{"resource":"Gist","code":"missing_field","field":"files"}]}
+            if len(new_content) == 0:
+                new_content.append("(no users)\n")
+
             old_content = get_gist_file_content(gist_id, filename)
             need_update = False
             if old_content is None:
@@ -300,5 +307,5 @@ if __name__ == "__main__":
     # Show annotation in GitHub Actions
     if star_changed:
         os.system('echo "::notice::Star changed"')
-    
+
     sys.exit(exit_code)
