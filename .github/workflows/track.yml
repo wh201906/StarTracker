@@ -15,9 +15,9 @@ jobs:
         id: checkout-self-use
         if: ${{ github.event_name == 'schedule' }} 
         continue-on-error: true
-        uses: actions/checkout@v3
-        with:
-          ref: self-use
+        run: |
+          cd ../
+          git clone $GITHUB_SERVER_URL/$GITHUB_REPOSITORY --depth=1 -b self-use
 
       - name: Checkout code (default)
         if: ${{ github.event_name != 'schedule' || steps.checkout-self-use.outcome == 'failure' }} 
