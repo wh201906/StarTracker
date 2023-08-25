@@ -173,10 +173,14 @@ def update_gist(gist_id: str, gist_content: dict, access_token: str):
         return False
 
 
-def get_gist_file_content(gist_id: str, filename: str):
+def get_gist_file_content(gist_id: str, filename: str, access_token):
     url = f"https://api.github.com/gists/{gist_id}"
-    response = requests.get(url)
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Accept": "application/vnd.github.v3+json",
+    }
 
+    response = requests.get(url, headers=headers)
     if response.status_code == 200:
         gist_data = response.json()
         files = gist_data.get("files")
@@ -263,7 +267,7 @@ if __name__ == "__main__":
             if len(new_content) == 0:
                 new_content.append("(no users)\n")
 
-            old_content = get_gist_file_content(gist_id, filename)
+            old_content = get_gist_file_content(gist_id, filename, personal_token)
             need_update = False
             if old_content is None:
                 print_flush("Warning: No history data")
