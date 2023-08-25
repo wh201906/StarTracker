@@ -1,7 +1,7 @@
 import git, sys
 
-source_repo_path = "./test"
-target_repo_path = "./output"
+SOURCE_REPO_PATH = "./test"
+TARGET_BRANCH_NAME = "shrinked"
 
 
 def has_changes(diff_result: git.DiffIndex):
@@ -22,10 +22,11 @@ def has_only_additions(diff_result: git.DiffIndex):
     return True
 
 
-repo = git.Repo(source_repo_path)
+repo = git.Repo(SOURCE_REPO_PATH)
 
 commit_list = []
 
+print("Checking commits")
 last_commit_type = "add"
 is_addition_last = True
 for commit in repo.iter_commits(reverse=True):
@@ -54,34 +55,44 @@ for commit in repo.iter_commits(reverse=True):
         # update last state
         if not changed:
             last_commit_type = "empty"
-        elif has_only_additions(diff_result):
+        elif additions_only:
             last_commit_type = "add"
         else:
             last_commit_type = "del"
 
     commit_list.append((commit.hexsha, new_commit))
 
-print(commit_list)
 commit_num = len(commit_list)
 if commit_num < 2:
     print(f"Error: this repo has only {commit_num} commit(s)")
     sys.exit(0)
+print(f"{commit_num} commits")
 commit_list.append(("end", True))  # pick the last commit
 
+print("Shrinking commits")
+new_commit_num = 0
+shrinked_commit_num = 0
 last_item = commit_list[0]
-repo.git.checkout("-b", "shrinked", commit_list[0][0])
+# the first commit is always picked
+# otherwise the `git cherry-pick` won't work
+repo.git.checkout("-b", TARGET_BRANCH_NAME, commit_list[0][0])
 for commit_item in commit_list[1:]:
     if commit_item[1] == True:
         commit_for_info = repo.commit(last_item[0])
         repo.index.commit(
-            "Test",
+            f"{shrinked_commit_num} Shrinked",
             author=commit_for_info.author,
             committer=commit_for_info.committer,
             author_date=commit_for_info.authored_datetime,
             commit_date=commit_for_info.committed_datetime,
         )
+        new_commit_num += 1
+        shrinked_commit_num = 0
     last_item = commit_item
 
     if commit_item[0] == "end":
         break
     repo.git.execute(f"git cherry-pick --allow-empty --no-commit {commit_item[0]}")
+    shrinked_commit_num += 1
+
+print(f"{commit_num} commits -> {new_commit_num + 1} commits")
