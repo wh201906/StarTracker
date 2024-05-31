@@ -6,7 +6,6 @@ on:
   schedule:
     - cron: "6 1-23/2 * * *"
 
-
 jobs:
   checker:
     runs-on: ubuntu-latest
@@ -21,7 +20,7 @@ jobs:
 
       - name: Checkout code (default)
         if: ${{ github.event_name != 'schedule' || steps.checkout-self-use.outcome == 'failure' }} 
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install aiohttp
         run: yes | pip install aiohttp
